@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compta Weidian - Gestion par Article</title>
+    <title>Compta Weidian Automatique</title>
     <style>
         :root { --bg: #f5f7fa; --text: #2c3e50; --primary: #3498db; --success: #2ecc71; --card: #ffffff; --danger: #e74c3c; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
@@ -26,10 +26,11 @@
 <body>
 
 <div class="container">
-    <h1>📊 Suivi Comptable Manuel Weidian</h1>
+    <h1>📊 Suivi Automatique via Lien Weidian</h1>
     
     <div id="sync-status" class="status">🔒 Clé d'accès requise</div>
 
+    <!-- CONNEXION CLOUD -->
     <div class="panel" style="background: #e2e8f0;">
         <h3>🔑 Clé d'accès Cloud (Token GitHub)</h3>
         <div style="display:flex; gap:10px;">
@@ -39,6 +40,7 @@
         </div>
     </div>
 
+    <!-- DASHBOARD -->
     <div class="dashboard">
         <div class="card">
             <h3>Frais Fixes (€)</h3>
@@ -58,16 +60,13 @@
         </div>
     </div>
 
+    <!-- AJOUTER UN ARTICLE VIA LIEN -->
     <div class="panel">
-        <h2>➕ Ajouter un Nouvel Article à suivre</h2>
+        <h2>➕ Ajouter un article en collant son LIEN WEIDIAN</h2>
         <form id="add-form" class="form-grid">
-            <div>
-                <label>Nom / Titre court :</label>
-                <input type="text" id="new-titre" placeholder="Ex: J4 Military Blue" required>
-            </div>
-            <div>
-                <label>Lien de l'image :</label>
-                <input type="url" id="new-image" placeholder="https://..." required>
+            <div style="grid-column: span 2;">
+                <label>Lien URL complet de l'article Weidian :</label>
+                <input type="url" id="new-url" placeholder="https://weidian.com/item.html?itemID=..." required>
             </div>
             <div>
                 <label>Prix d'usine (€) :</label>
@@ -78,17 +77,18 @@
                 <input type="number" id="new-vente" step="0.01" placeholder="40.00" required>
             </div>
             <div style="display: flex; align-items: flex-end;">
-                <button type="submit" style="background:var(--success); width:100%; height:40px; margin-bottom:15px;">Créer l'article</button>
+                <button type="submit" style="background:var(--success); width:100%; height:40px; margin-bottom:15px;">🔗 Analyser & Créer</button>
             </div>
         </form>
     </div>
 
-    <h2>📦 Vos Articles et Mises à jour</h2>
+    <!-- LISTE DES PRODUITS -->
+    <h2>📦 Vos Articles en cours de suivi</h2>
     <table>
         <thead>
             <tr>
                 <th>Aperçu</th>
-                <th>Titre de l'article</th>
+                <th>Détails de l'article</th>
                 <th>Prix Usine / Vente</th>
                 <th>Cumul Ventes Weidian</th>
                 <th>Ventes du jour</th>
@@ -101,32 +101,28 @@
 </div>
 
 <script>
-    // Config de ton dépôt
-    const GH_REPO = "VOTRE_PSEUDO/compta-weidian"; 
+    const GH_REPO = "sla87705/xin1"; 
     const GH_FILE = "memoire_boutique.json"; 
+    
+    // Proxy public pour contourner le blocage CORS des navigateurs
+    const PROXY_URL = "https://api.allorigins.win/get?url=";
 
     let cloudData = { configArticles: {}, historique: [] };
     let fileSha = ""; 
 
     function getStoredToken() { return localStorage.getItem('gh_secure_token') || ""; }
-
     function configurerToken() {
         const token = document.getElementById('user-token').value.trim();
         if(!token) return alert("Entrez votre jeton.");
         localStorage.setItem('gh_secure_token', token);
         chargerMemoirePartagee();
     }
-
-    function deconnecterToken() {
-        localStorage.removeItem('gh_secure_token');
-        location.reload();
-    }
+    function deconnecterToken() { localStorage.removeItem('gh_secure_token'); location.reload(); }
 
     async function chargerMemoirePartagee() {
         const token = getStoredToken();
         if(!token) return;
         document.getElementById('user-token').value = token;
-
         const url = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
         try {
             const response = await fetch(url, { headers: { "Authorization": `token ${token}` } });
@@ -135,91 +131,137 @@
                 fileSha = data.sha;
                 const decodedContent = decodeURIComponent(escape(atob(data.content)));
                 cloudData = decodedContent.trim() === "{}" || decodedContent.trim() === "" ? { configArticles: {}, historique: [] } : JSON.parse(decodedContent);
-                document.getElementById('sync-status').innerText = "✅ Connecté au Cloud Weidian !";
+                document.getElementById('sync-status').innerText = "✅ Connecté au Cloud !";
                 document.getElementById('sync-status').style.background = "#badc58";
                 calculerEtAfficher();
             }
-        } catch (e) { document.getElementById('sync-status').innerText = "❌ Erreur de synchronisation."; }
+        } catch (e) { document.getElementById('sync-status').innerText = "❌ Erreur sync."; }
     }
 
     async function sauvegarderDansLeCloud() {
         const token = getStoredToken();
-        if(!token) return alert("Non connecté.");
+        if(!token) return;
         const url = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
         const contenuEnBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(cloudData, null, 2))));
-        const bodyData = { message: "Mise à jour manuelle", content: contenuEnBase64, sha: fileSha };
-
+        const bodyData = { message: "Mise à jour automatique", content: contenuEnBase64, sha: fileSha };
         try {
             const response = await fetch(url, {
                 method: "PUT",
                 headers: { "Authorization": `token ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify(bodyData)
             });
-            if(response.ok) {
-                const resData = await response.json();
-                fileSha = resData.content.sha;
-            }
+            if(response.ok) { const resData = await response.json(); fileSha = resData.content.sha; }
         } catch (e) { alert("Erreur cloud."); }
     }
 
-    // FORMULAIRE DE CRÉATION D'ARTICLE
+    // FONCTION DE SCRAPING EN ARRIÈRE-PLAN
+    async function scraperPageWeidian(urlWeidian) {
+        try {
+            // Demande au proxy d'aller chercher le HTML de Weidian à notre place
+            const response = await fetch(`${PROXY_URL}${encodeURIComponent(urlWeidian)}`);
+            if (!response.ok) throw new Error("Erreur réseau du Proxy");
+            
+            const json = await response.json();
+            const htmlText = json.contents; // Contient le code source brut de la page
+
+            // Extraction du titre (Balise <title>)
+            let titre = "Produit sans nom";
+            const matchTitre = htmlText.match(/<title>([\s\S]*?)<\/title>/i);
+            if (matchTitre) titre = matchTitre[1].replace("- 微店", "").trim();
+
+            // Extraction de l'image principale
+            let image = "https://placehold.co/60x60?text=No+Img";
+            const matchImg = htmlText.match(/<meta property="og:image" content="([^"]+)"/i) || htmlText.match(/id="item_img_id" src="([^"]+)"/i);
+            if (matchImg) image = matchImg[1];
+
+            // Extraction des ventes (銷量 / 销量)
+            let ventes = 0;
+            const regexVentes = /(?:销量|銷量)\s*[:：]?\s*([0-9\.]+)\s*(万)?/i;
+            const matchVentes = htmlText.match(regexVentes);
+            if (matchVentes) {
+                ventes = parseFloat(matchVentes[1]);
+                if (matchVentes[2] || htmlText.includes("万")) ventes = Math.round(ventes * 10000);
+            }
+
+            return { titre, image, ventes, valide: true };
+        } catch (error) {
+            console.error(error);
+            return { valide: false };
+        }
+    }
+
+    // ACTION : CREER UN ARTICLE DEPUIS SON LIEN
     document.getElementById('add-form').addEventListener('submit', async function(e) {
         e.preventDefault();
-        const idUnique = "art_" + Date.now(); // ID basé sur le timestamp
-        
-        if(!cloudData.configArticles) cloudData.configArticles = {};
+        const urlWeidian = document.getElementById('new-url').value.trim();
+        const prixUsine = parseFloat(document.getElementById('new-usine').value) || 0;
+        const prixVente = parseFloat(document.getElementById('new-vente').value) || 0;
 
-        cloudData.configArticles[idUnique] = {
-            titre: document.getElementById('new-titre').value.trim(),
-            image: document.getElementById('new-image').value.trim(),
-            prixUsine: parseFloat(document.getElementById('new-usine').value) || 0,
-            prixVente: parseFloat(document.getElementById('new-vente').value) || 0
-        };
+        document.getElementById('sync-status').innerText = "⏳ Analyse automatique du lien Weidian en cours...";
+        document.getElementById('sync-status').style.background = "#ffeaa7";
 
-        this.reset();
-        await sauvegarderDansLeCloud();
-        calculerEtAfficher();
-    });
+        const resultat = await scraperPageWeidian(urlWeidian);
 
-    // BOUTON RAFRAICHIR INDIVIDUEL
-    async function rafraichirArticle(idArticle) {
-        // Demande à l'utilisateur de coller la ligne de Weidian
-        const texteColle = prompt("Sur la mini-app Weidian, copie la ligne des ventes de cet article (ou fais un screen-to-text) et colle-la ici :");
-        if (!texteColle) return;
+        if (resultat.valide) {
+            const idUnique = "art_" + Date.now();
+            if(!cloudData.configArticles) cloudData.configArticles = {};
+            
+            cloudData.configArticles[idUnique] = {
+                titre: resultat.titre,
+                image: resultat.image,
+                url: urlWeidian,
+                prixUsine: prixUsine,
+                prixVente: prixVente
+            };
 
-        // Extraction intelligente du nombre à côté de 销量
-        const regexVentes = /销量\s*[:：]?\s*([0-9\.]+)\s*(万)?/i;
-        const match = texteColle.match(regexVentes);
-
-        if (match) {
-            let ventes = parseFloat(match[1]);
-            if (texteColle.includes("万")) ventes = Math.round(ventes * 10000);
-            else ventes = Math.floor(ventes);
-
+            // Ajouter immédiatement la première valeur de vente à l'historique
             const aujourdhui = new Date().toLocaleDateString('fr-FR');
             if(!cloudData.historique) cloudData.historique = [];
+            cloudData.historique.push({ date: aujourdhui, articleId: idUnique, totalVentes: resultat.ventes });
 
-            // Enregistrement dans l'historique
+            this.reset();
+            await sauvegarderDansLeCloud();
+            calculerEtAfficher();
+            alert(`Article ajouté avec succès : \n${resultat.titre}\nVentes détectées : ${resultat.ventes}`);
+        } else {
+            alert("❌ Impossible de charger automatiquement ce lien. Weidian bloque peut-être l'accès via serveur tiers.");
+            chargerMemoirePartagee();
+        }
+    });
+
+    // ACTION : BOUTON REFRESH INDIVIDUEL (AUTOMATIQUE)
+    async function rafraichirAutomatique(idArticle) {
+        const config = cloudData.configArticles[idArticle];
+        if(!config.url) return alert("Cet article n'a pas de lien URL associé.");
+
+        document.getElementById('sync-status').innerText = `⏳ Actualisation de : ${config.titre}...`;
+        document.getElementById('sync-status').style.background = "#ffeaa7";
+
+        const resultat = await scraperPageWeidian(config.url);
+
+        if(resultat.valide) {
+            const aujourdhui = new Date().toLocaleDateString('fr-FR');
             const idx = cloudData.historique.findIndex(h => h.date === aujourdhui && h.articleId === idArticle);
+            
             if (idx !== -1) {
-                cloudData.historique[idx].totalVentes = ventes;
+                cloudData.historique[idx].totalVentes = resultat.ventes;
             } else {
-                cloudData.historique.push({ date: aujourdhui, articleId: idArticle, totalVentes: ventes });
+                cloudData.historique.push({ date: aujourdhui, articleId: idArticle, totalVentes: resultat.ventes });
             }
 
             await sauvegarderDansLeCloud();
             calculerEtAfficher();
-            alert(`Mis à jour : ${ventes} ventes totales au compteur.`);
+            alert(`Mise à jour réussie pour ${config.titre} ! Nouveau cumul : ${resultat.ventes}`);
         } else {
-            alert("Impossible de lire le mot '销量'. Assure-toi que la mention '销量' et le chiffre sont bien présents dans ce que tu as collé.");
+            alert("❌ Échec de la mise à jour automatique. Le lien est mort ou Weidian a bloqué la requête.");
+            chargerMemoirePartagee();
         }
     }
 
-    // CALCULS ET RENDU DU TABLEAU
+    // RENDU TABLEAU
     function calculerEtAfficher() {
         const tbody = document.getElementById('articles-body');
         tbody.innerHTML = '';
-
         let totalVentesJour = 0, totalCAJour = 0, totalBenefJour = 0;
         const fraisFixes = parseFloat(document.getElementById('frais-fixes').value) || 0;
         const aujourdhui = new Date().toLocaleDateString('fr-FR');
@@ -230,8 +272,7 @@
             const config = cloudData.configArticles[idArticle];
             const histArticle = (cloudData.historique || []).filter(h => h.articleId === idArticle);
 
-            let cumulActuel = 0;
-            let ventesDuJour = 0;
+            let cumulActuel = 0, ventesDuJour = 0;
 
             if (histArticle.length > 0) {
                 const dataAujourdhui = histArticle.find(h => h.date === aujourdhui);
@@ -249,19 +290,17 @@
             let caJour = ventesDuJour * config.prixVente;
             let benefJour = ventesDuJour * (config.prixVente - config.prixUsine);
 
-            totalVentesJour += ventesDuJour;
-            totalCAJour += caJour;
-            totalBenefJour += benefJour;
+            totalVentesJour += ventesDuJour; totalCAJour += caJour; totalBenefJour += benefJour;
 
             tbody.innerHTML += `<tr>
-                <td><img class="prod-img" src="${config.image}" onerror="this.src='https://placehold.co/60x60?text=No+Img'"></td>
-                <td><strong>${config.titre}</strong></td>
+                <td><img class="prod-img" src="${config.image}"></td>
+                <td><a href="${config.url}" target="_blank"><b>${config.titre}</b></a></td>
                 <td><small>Usine: ${config.prixUsine}€ <br> Vente: ${config.prixVente}€</small></td>
-                <td><span style="color:#7f8c8d; font-weight:bold;">${cumulActuel || 'Non mis à jour'}</span></td>
+                <td><span style="color:#7f8c8d; font-weight:bold;">${cumulActuel}</span></td>
                 <td><b style="color:var(--success)">+${ventesDuJour}</b></td>
                 <td><b>${benefJour.toFixed(2)} €</b></td>
                 <td>
-                    <button onclick="rafraichirArticle('${idArticle}')" style="background:var(--success)">🔄 Rafraîchir</button>
+                    <button onclick="rafraichirAutomatique('${idArticle}')" style="background:var(--primary)">🔄 Rafraîchir</button>
                     <button onclick="supprimerArticle('${idArticle}')" style="background:var(--danger); padding:5px 8px; font-size:0.8rem;">X</button>
                 </td>
             </tr>`;
@@ -273,11 +312,10 @@
     }
 
     async function supprimerArticle(idArticle) {
-        if(confirm("Supprimer ce produit ?")) {
+        if(confirm("Supprimer ?")) {
             delete cloudData.configArticles[idArticle];
             cloudData.historique = cloudData.historique.filter(h => h.articleId !== idArticle);
-            await sauvegarderDansLeCloud();
-            calculerEtAfficher();
+            await sauvegarderDansLeCloud(); calculerEtAfficher();
         }
     }
 
