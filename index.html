@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compta Weidian Sécurisée</title>
+    <style>
+        :root { --bg: #f5f7fa; --text: #2c3e50; --primary: #3498db; --success: #2ecc71; --card: #ffffff; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+        .card p { margin: 0; font-size: 1.8rem; font-weight: bold; }
+        .grid-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .panel { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        textarea, input, select { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; }
+        button:hover { opacity: 0.9; }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #edf2f7; }
+        .status { padding: 10px; margin-bottom: 15px; border-radius: 5px; font-weight: bold; text-align: center; background: #ffeaa7; }
+        .secure-gate { background: #e2e8f0; border-left: 5px solid var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📈 Analyse Boutique & Comptabilité Nuage</h1>
+    
+    <!-- Statut de connexion et Verrou de sécurité -->
+    <div id="sync-status" class="status">🔒 Configuration de la clé d'accès requise ci-dessous</div>
+
+    <div class="panel secure-gate" style="margin-bottom: 30px;">
+        <h2>🔑 Connexion Sécurisée au Cloud</h2>
+        <p style="font-size:0.85rem; margin-top:-10px; color:#555;">Entrez votre Token GitHub personnel. Il sera enregistré uniquement sur cet appareil.</p>
+        <div style="display:flex; gap:10px;">
+            <input type="password" id="user-token" placeholder="Collez votre ghp_... (Token GitHub)" style="margin:0;">
+            <button onclick="configurerToken()" style="width:auto; white-space:nowrap;">Se connecter</button>
+            <button onclick="deconnecterToken()" style="width:auto; background:var(--danger); white-space:nowrap;">Déconnexion</button>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="dashboard">
+        <div class="card">
+            <h3>Frais Fixes (€)</h3>
+            <input type="number" id="frais-fixes" value="100" onchange="calculerEtAfficher()" style="text-align:center;">
+        </div>
+        <div class="card">
+            <h3>Ventes (Période)</h3>
+            <p id="total-ventes">0</p>
+        </div>
+        <div class="card">
+            <h3>Chiffre d'Affaires</h3>
+            <p id="total-ca">0.00 €</p>
+        </div>
+        <div class="card" style="color:var(--success)">
+            <h3>Bénéfice Net</h3>
+            <p id="total-benefice">0.00 €</p>
+        </div>
+    </div>
+
+    <div class="grid-inputs">
+        <!-- CONFIG -->
+        <div class="panel">
+            <h2>⚙️ Configurer un Article</h2>
+            <form id="config-form">
+                <input type="text" id="art-id" placeholder="ID de l'article (ex: Chaussure-X)" required>
+                <input type="number" id="art-usine" step="0.01" placeholder="Prix d'usine (€)" required>
+                <input type="number" id="art-vente" step="0.01" placeholder="Prix de vente (€)" required>
+                <button type="submit">Enregistrer l'article dans le Cloud</button>
+            </form>
+        </div>
+
+        <!-- IMPORTATEUR -->
+        <div class="panel">
+            <h2>📋 Importateur Copier-Coller Weidian</h2>
+            <select id="select-art-import"></select>
+            <textarea id="weidian-text" rows="4" placeholder="Collez le texte (CTRL+A / CTRL+C) de votre page Weidian triée par ventes..."></textarea>
+            <button type="button" style="background:var(--success)" onclick="extraireDonnies()">Analyser et Synchroniser</button>
+        </div>
+    </div>
+
+    <!-- TABLEAU -->
+    <h2>📅 Historique Global (Tous utilisateurs)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Article</th>
+                <th>Cumul Ventes</th>
+                <th>Ventes du Jour</th>
+                <th>Bénéfice Net</th>
+            </tr>
+        </thead>
+        <tbody id="historique-table"></tbody>
+    </table>
+</div>
+
+<script>
+    // ==========================================
+    // CONFIGURATION DU REPOSITORIE UNIQUEMENT
+    // ==========================================
+    const GH_REPO = "VOTRE_PSEUDO/compta-weidian"; // <-- Remplace juste par ton "pseudo/depot"
+    const GH_FILE = "memoire_boutique.json"; 
+
+    let cloudData = { configArticles: {}, historique: [] };
+    let fileSha = ""; 
+
+    // Récupérer le token local s'il existe
+    function getStoredToken() {
+        return localStorage.getItem('gh_secure_token') || "";
+    }
+
+    function configurerToken() {
+        const inputToken = document.getElementById('user-token').value.trim();
+        if(!inputToken) return alert("Veuillez entrer un token valide.");
+        localStorage.setItem('gh_secure_token', inputToken);
+        alert("Clé enregistrée localement ! Tentative de connexion...");
+        chargerMemoirePartagee();
+    }
+
+    function deconnecterToken() {
+        localStorage.removeItem('gh_secure_token');
+        document.getElementById('user-token').value = "";
+        document.getElementById('sync-status').innerText = "🔒 Déconnecté. Configuration de la clé d'accès requise.";
+        document.getElementById('sync-status').style.background = "#ffeaa7";
+        cloudData = { configArticles: {}, historique: [] };
+        updateSelectArticles();
+        calculerEtAfficher();
+    }
+
+    async function chargerMemoirePartagee() {
+        const token = getStoredToken();
+        if(!token) {
+            document.getElementById('sync-status').innerText = "🔒 Clé manquante ou non configurée.";
+            return;
+        }
+        document.getElementById('user-token').value = token;
+
+        const url = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+        try {
+            const response = await fetch(url, { headers: { "Authorization": `token ${token}` } });
+            if (response.ok) {
+                const data = await response.json();
+                fileSha = data.sha;
+                const decodedContent = decodeURIComponent(escape(atob(data.content)));
+                cloudData = decodedContent.trim() === "{}" || decodedContent.trim() === "" ? { configArticles: {}, historique: [] } : JSON.parse(decodedContent);
+                document.getElementById('sync-status').innerText = "✅ Mémoire nuage synchronisée avec succès !";
+                document.getElementById('sync-status').style.background = "#badc58";
+                updateSelectArticles();
+                calculerEtAfficher();
+            } else {
+                document.getElementById('sync-status').innerText = "❌ Erreur : Vérifiez votre jeton ou le nom de votre dépôt.";
+                document.getElementById('sync-status').style.background = "#ff7675";
+            }
+        } catch (error) {
+            document.getElementById('sync-status').innerText = "❌ Impossible de joindre GitHub.";
+            document.getElementById('sync-status').style.background = "#ff7675";
+        }
+    }
+
+    async function sauvegarderDansLeCloud() {
+        const token = getStoredToken();
+        if(!token) return alert("Action impossible : vous n'êtes pas connecté avec votre clé.");
+
+        document.getElementById('sync-status').innerText = "⏳ Sauvegarde sur le fichier partagé...";
+        document.getElementById('sync-status').style.background = "#ffeaa7";
+
+        const url = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+        const contenuEnBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(cloudData, null, 2))));
+
+        const bodyData = { message: "Mise à jour compta", content: contenuEnBase64, sha: fileSha };
+
+        try {
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: { "Authorization": `token ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(bodyData)
+            });
+            if(response.ok) {
+                const resData = await response.json();
+                fileSha = resData.content.sha;
+                document.getElementById('sync-status').innerText = "✅ Changements enregistrés pour tous !";
+                document.getElementById('sync-status').style.background = "#badc58";
+            } else {
+                alert("Erreur lors de l'envoi des données : vérifiez les droits d'écriture de votre Token.");
+            }
+        } catch (error) { alert("Erreur cloud : " + error.message); }
+    }
+
+    document.getElementById('config-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const id = document.getElementById('art-id').value.trim();
+        cloudData.configArticles[id] = {
+            prixUsine: parseFloat(document.getElementById('art-usine').value),
+            prixVente: parseFloat(document.getElementById('art-vente').value)
+        };
+        this.reset();
+        await sauvegarderDansLeCloud();
+        updateSelectArticles();
+        calculerEtAfficher();
+    });
+
+    function updateSelectArticles() {
+        const select = document.getElementById('select-art-import');
+        select.innerHTML = '';
+        if(!cloudData.configArticles) cloudData.configArticles = {};
+        Object.keys(cloudData.configArticles).forEach(id => {
+            let opt = document.createElement('option'); opt.value = id; opt.innerText = id; select.appendChild(opt);
+        });
+    }
+
+    async function extraireDonnies() {
+        const articleId = document.getElementById('select-art-import').value;
+        const texte = document.getElementById('weidian-text').value;
+        const regex = /销量\s*[:：]?\s*(\d+)/i;
+        const match = texte.match(regex);
+
+        if (match && match[1]) {
+            const ventesTrouvees = parseInt(match[1]);
+            const aujourdhui = new Date().toLocaleDateString('fr-FR');
+
+            if(!cloudData.historique) cloudData.historique = [];
+            const indexExistant = cloudData.historique.findIndex(h => h.date === aujourdhui && h.articleId === articleId);
+            if(indexExistant !== -1) {
+                cloudData.historique[indexExistant].totalVentes = ventesTrouvees;
+            } else {
+                cloudData.historique.push({ date: aujourdhui, articleId: articleId, totalVentes: ventesTrouvees });
+            }
+
+            document.getElementById('weidian-text').value = '';
+            await sauvegarderDansLeCloud();
+            calculerEtAfficher();
+        } else { alert("Mot clé '销量' introuvable."); }
+    }
+
+    function calculerEtAfficher() {
+        const tbody = document.getElementById('historique-table');
+        tbody.innerHTML = '';
+        let totalVentes = 0, totalCA = 0, totalBenef = 0;
+        const fraisFixes = parseFloat(document.getElementById('frais-fixes').value) || 0;
+
+        if(!cloudData.historique) cloudData.historique = [];
+        const histTrie = [...cloudData.historique].reverse();
+
+        histTrie.forEach(brut => {
+            const config = cloudData.configArticles[brut.articleId] || { prixUsine: 0, prixVente: 0 };
+            const indexOrigine = cloudData.historique.findIndex(h => h === brut);
+            let ventesHier = 0;
+            for(let i = indexOrigine - 1; i >= 0; i--) {
+                if(cloudData.historique[i].articleId === brut.articleId) { ventesHier = cloudData.historique[i].totalVentes; break; }
+            }
+
+            let ventesDuJour = ventesHier > 0 ? (brut.totalVentes - ventesHier) : 0;
+            if(ventesDuJour < 0) ventesDuJour = 0;
+
+            let caJour = ventesDuJour * config.prixVente;
+            let benefJour = ventesDuJour * (config.prixVente - config.prixUsine);
+
+            totalVentes += ventesDuJour; totalCA += caJour; totalBenef += benefJour;
+
+            tbody.innerHTML += `<tr>
+                <td><b>${brut.date}</b></td>
+                <td>${brut.articleId}</td>
+                <td>${brut.totalVentes}</td>
+                <td style="color:var(--success)">+${ventesDuJour}</td>
+                <td>${benefJour.toFixed(2)} €</td>
+            </tr>`;
+        });
+
+        document.getElementById('total-ventes').innerText = totalVentes;
+        document.getElementById('total-ca').innerText = totalCA.toFixed(2) + " €";
+        document.getElementById('total-benefice').innerText = (totalBenef - fraisFixes).toFixed(2) + " €";
+    }
+
+    // Tente de charger si la clé est déjà stockée dans le navigateur
+    chargerMemoirePartagee();
+</script>
+</body>
+</html>
